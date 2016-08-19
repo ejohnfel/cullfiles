@@ -1,3 +1,115 @@
 #!/bin/bash
 
-echo -e 'It begins..."
+#
+# Cull Files 
+#
+
+version="0.1"
+codename="Dirt Cheap"
+
+srcFolder=""
+interval=days
+limit=365
+okfiles=true
+okfolders=false
+
+# Usage
+# Input Parameters : None
+function Usage()
+{
+	echo -e "Cullfiles\n========="
+	echo -e "-s\tSet source folder"
+	echo -e "-l\tSet limit"
+	echo -e "-i\tSet interval"
+	echo -e "-f+\tOK to remove files (default)"
+	echo -e "-f-\tNot OK to remove files"
+	echo -e "-d+\tOK to remove folders"
+	echo -e "-d-\tNot OK to remove folders (default)"
+	echo -e "\n\nInterval can be, minutes, hours, days, weeks, months, years"
+}
+
+# Cull
+# Input Parameters : tmpfile
+function Cull()
+{
+	while read line; do
+		if [ -f ${line} -a ${okfiles} = true ]; then
+			[ -e ${line} ] && rm ${line}
+		elif [ -d ${line} -a ${okfolders} = true ]; then
+			[ -e ${line} ] && rm -R ${line}
+		fi
+	done < $1
+}
+
+#
+# Main Loop
+#
+
+if [ "$1" = "" ]; then
+	Usage
+	exit 0
+fi
+
+# Parse Cmd Line
+while [ "$1" = "" ]; do
+	case "$1" in
+	"-s")
+		srcFolder="$1"
+		shift 1 ;;
+	"-l")
+		limit=$1
+		shift 1 ;;
+	"-i")
+		interval=$1
+		shift 1 ;;
+	"-f"|"-f+")
+		okfiles=true ;;
+	"-f-")
+		okfiles=false ;;
+	"-d"|"-d+")
+		okfolders=true ;;
+	"-d-")
+		okfolders=false ;;
+	*)
+		Usage
+		exit 127 ;;
+	esac
+	shift 1
+done
+
+if [ "${srcFolder}" = "" ]; then
+	exit 0
+fi
+
+tmpfile=/tmp/cullfiles.${RANDOM}
+
+pushd ${srcFolder}
+
+case ${interval} in
+"minutes"|"min")
+	find . -mmin ${limit} > ${tmpfile}
+	;;
+"hours"|"hrs")
+	limit=$(( ${limit} * 60 ))
+	find . -mmin ${limit) > ${tmpfile}
+	;;
+"days"|"d")
+	find . -mtime ${limit} > ${tmpfile}
+	;;
+"weeks"|"w"|"wks")
+	limit=$(( ${limit} * 7 ))
+	find . -mtime ${limit} > ${tmpfile}
+	;;
+"months"|"mon")
+	limit=$(( ${limit} * 30 ))
+	find . -mtime ${limit} > ${tmpfile}
+	;;
+"years"|"yrs")
+	limit=$(( ${limit} * 365 ))
+	find . -mtime ${limit} > ${tmpfile}
+	;;
+esac
+
+[ -e ${tmpfile} ] && Cull ${tmpfile} && rm ${tmpfile}
+
+popd
