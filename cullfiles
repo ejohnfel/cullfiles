@@ -7,6 +7,7 @@
 version="0.1"
 codename="Dirt Cheap"
 debugmode=false
+simulate=false
 
 declare -a items
 
@@ -24,6 +25,7 @@ function Usage()
 	echo -e "-h\tThis menu"
 	echo -e "-v\tVersion Info"
 	echo -e "-x\tSet Debugmode"
+	echo -e "-z\tSimulate mode"
 	echo -e "-m\tSet mode"
 	echo -e "-l\tSet limit"
 	echo -e "-i\tSet interval"
@@ -46,10 +48,12 @@ function Cull()
 	while read line; do
 		if [ -f ${line} -a ${okfiles} = true ]; then
 			[ ${debugmode} = true ] && echo -e "XXX Removing file : ${line}"
-			#[ -e ${line} ] && rm ${line}
+			[ -e ${line} -a ${simulate} = false ] && rm ${line}
+			[ -e ${line} -a ${simulate} = true ] && echo -a "Removing file ${line}"
 		elif [ -d ${line} -a ${okfolders} = true ]; then
 			[ ${debugmode} = true ] && echo -e "XXX Removing folder : ${line}"
-			#[ -e ${line} ] && rm -R ${line}
+			[ -e ${line} -a ${simulate} = false ] && rm -R ${line}
+			[ -e ${line} -a ${simulate} = true ] && echo -a "Removing folder ${line}"
 		fi
 	done < $1
 }
@@ -181,31 +185,24 @@ count=0
 # Parse Cmd Line
 while [ ! "$1" = "" ]; do
 	case "$1" in
-	"-h")
-		Usage
+	"-h")	Usage
 		exit 0 ;;
-	"-v")
-		echo -e "Version : ${version}"
+	"-v")	echo -e "Version : ${version}"
 		exit 0 ;;
-	"-x")
-		debugmode=true ;;
-	"-m")
-		mode=$2
+	"-x")	debugmode=true ;;
+	"-z")	simulate=true ;;
+	"-m")	mode=$2
 		shift 1 ;;
-	"-l")
-		limit=$2
+	"-l")	limit=$2
 		shift 1 ;;
-	"-i")
-		interval=$2
+	"-i")	interval=$2
 		shift 1 ;;
 	"-f"|"-f+")
 		okfiles=true ;;
-	"-f-")
-		okfiles=false ;;
+	"-f-")	okfiles=false ;;
 	"-d"|"-d+")
 		okfolders=true ;;
-	"-d-")
-		okfolders=false ;;
+	"-d-")	okfolders=false ;;
 	*)
 		if [ -f "$1" ]; then
 			items[${count}]="$1"
