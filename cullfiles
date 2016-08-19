@@ -181,6 +181,7 @@ if [ "$1" = "" ]; then
 fi
 
 count=0
+cmdLineError=false
 
 # Parse Cmd Line
 while [ ! "$1" = "" ]; do
@@ -210,11 +211,16 @@ while [ ! "$1" = "" ]; do
 		elif [ -d "$1" ] ; then
 			items[${count}]="$1"
 			count=$(( ${count} + 1 ))
+		else
+			echo -e "Not sure just what '$1' is"
+			cmdlineError=true
 		fi
 		;;
 	esac
 	shift 1
 done
+
+[ ${cmdLineError} = true ] && Usage && exit 127
 
 if [ ${#items[@]} -lt 1 ]; then
 	echo -e "Nothing to cull"
