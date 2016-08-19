@@ -1,13 +1,16 @@
 #!/bin/bash
 
 #
-# Cull Files 
+# Cull Files
 #
 
 version="0.1"
 codename="Dirt Cheap"
+debugmode=false
 
-srcFolder=""
+declare -a items
+
+mode=time
 interval=days
 limit=365
 okfiles=true
@@ -18,14 +21,22 @@ okfolders=false
 function Usage()
 {
 	echo -e "Cullfiles\n========="
-	echo -e "-s\tSet source folder"
+	echo -e "-h\tThis menu"
+	echo -e "-v\tVersion Info"
+	echo -e "-x\tSet Debugmode"
+	echo -e "-m\tSet mode"
 	echo -e "-l\tSet limit"
 	echo -e "-i\tSet interval"
 	echo -e "-f+\tOK to remove files (default)"
 	echo -e "-f-\tNot OK to remove files"
 	echo -e "-d+\tOK to remove folders"
 	echo -e "-d-\tNot OK to remove folders (default)"
-	echo -e "\n\nInterval can be, minutes, hours, days, weeks, months, years"
+	echo -e "\n\nInterval can be, minutes, hours, days, weeks, months, years for time values"
+	echo -e "and b, k, m, g for total size. For number, interval is irrelevant"
+	echo -e "Limits are some multiple of the interval"
+	echo -e "Mode is [time|number|size], default is time. When number or size, limit is the max value"
+	echo -e "When mode is number or size, oldest items are culled first"
+	echo -e "cullfiles [options] [folders] [files]"
 }
 
 # Cull
@@ -34,11 +45,126 @@ function Cull()
 {
 	while read line; do
 		if [ -f ${line} -a ${okfiles} = true ]; then
-			[ -e ${line} ] && rm ${line}
+			[ ${debugmode} = true ] && echo -e "XXX Removing file : ${line}"
+			#[ -e ${line} ] && rm ${line}
 		elif [ -d ${line} -a ${okfolders} = true ]; then
-			[ -e ${line} ] && rm -R ${line}
+			[ ${debugmode} = true ] && echo -e "XXX Removing folder : ${line}"
+			#[ -e ${line} ] && rm -R ${line}
 		fi
 	done < $1
+}
+
+# Trim By Number
+# Input Parameters : tmpfile
+function TrimByNumber()
+{
+	# Trim Tmp entries by number (oldest first)
+	tmp=/tmp/trimbysize.${RANDOM}
+
+	for item in ${items[@]}; do
+		find ${item} -type f -print >> $1
+	done
+
+	total=$(wc -l $1)
+	topitems=$(( ${total} - ${limit} ))
+
+	if [ ${topitems} -gt 0 ]; then
+		head -n ${topitems} $1 > ${tmp}
+		rm $1
+		mv ${tmp} $1
+	else
+		# Nothing to delete
+		rm $1
+	fi
+}
+
+# Trim By Size
+# Input Parameters : tmpfile
+function TrimBySize()
+{
+	# Trim files until down to a certain size (oldest first)
+	tmp=/tmp/trimbysize.${RANDOM}
+
+	disksize=1
+
+	case ${interval} in
+	"b") # Bytes
+		;;
+	"k") # Kilobytes
+		limit=$(( ${limit} * 1024 )) ;;
+	"m") # Megabytes
+		limit=$(( ${limit} * 1024 * 1024 )) ;;
+	"g") # Gigabytes
+		limit=$(( ${limit} * 1024 * 1024 * 1024 )) ;;
+	esac
+
+	for item in ${items[@]}; do
+		find ${item} -type f -print >> ${tmp}
+	done
+
+	while [ ${disksize} -gt 0 ]; do
+		disksize=0
+
+		while read item; do
+			if [ -f ${item} ]; then
+				disksize=$(( ${disksize} + $(du -cb ${item} | grep total | cut -f1) ))
+			fi
+		done < ${tmp}
+
+		if [ ${disksize} -gt ${limit} ]; then
+			total=$(wc -l ${tmp})
+			extract=$(( ${total} - 1 ))
+			tail -n ${extract} ${tmp} > ${tmp}.tmp
+			rm ${tmp}
+			mv ${tmp}.tmp ${tmp}
+			disksize=0
+		fi
+	done
+
+	[ -e ${tmp} ] && mv ${tmp} $1
+}
+
+# GetItemsMin
+# Input Parameters : tmpfile
+function GetItemsMin()
+{
+	[ ${debugmode} = true ] && echo -e "Entering  GetItemsMin"
+
+	for item in ${items[@]}; do
+		[ ${debugmode} = true ] && echo -e "Checking ${item}"
+
+		if [ -f ${item} ]; then
+			find ${item} -mmin +${limit} -print >> ${tmpfile}
+		elif [ -d ${item} ]; then
+			find ${item} -mmin +${limit} -print >> ${tmpfile}
+		fi
+	done
+}
+
+# GetItemsTime
+# Input Parameters : tmpfile
+function GetItemsTime()
+{
+	[ ${debugmode} = true ] && echo -e "Entering  GetItemsTime"
+
+	for item in ${items[@]}; do
+		[ ${debugmode} = true ] && echo -e "Checking ${item}"
+
+		if [ -f ${item} ]; then
+			find ${item} -mtime +${limit} -print >> ${tmpfile}
+		elif [ -d ${item} ]; then
+			find ${item} -mtime +${limit} -print >> ${tmpfile}
+		fi
+	done
+}
+
+# Get Items
+# Input Parameters : tmpfile
+function GetItems()
+{
+	# Get Items in sorted order from oldest to newest
+
+	ls -rt1 ${items[@]} >> ${tmpfile}
 }
 
 #
@@ -50,17 +176,27 @@ if [ "$1" = "" ]; then
 	exit 0
 fi
 
+count=0
+
 # Parse Cmd Line
-while [ "$1" = "" ]; do
+while [ ! "$1" = "" ]; do
 	case "$1" in
-	"-s")
-		srcFolder="$1"
+	"-h")
+		Usage
+		exit 0 ;;
+	"-v")
+		echo -e "Version : ${version}"
+		exit 0 ;;
+	"-x")
+		debugmode=true ;;
+	"-m")
+		mode=$2
 		shift 1 ;;
 	"-l")
-		limit=$1
+		limit=$2
 		shift 1 ;;
 	"-i")
-		interval=$1
+		interval=$2
 		shift 1 ;;
 	"-f"|"-f+")
 		okfiles=true ;;
@@ -71,45 +207,46 @@ while [ "$1" = "" ]; do
 	"-d-")
 		okfolders=false ;;
 	*)
-		Usage
-		exit 127 ;;
+		if [ -f "$1" ]; then
+			items[${count}]="$1"
+			count=$(( ${count} + 1 ))
+		elif [ -d "$1" ] ; then
+			items[${count}]="$1"
+			count=$(( ${count} + 1 ))
+		fi
+		;;
 	esac
 	shift 1
 done
 
-if [ "${srcFolder}" = "" ]; then
+if [ ${#items[@]} -lt 1 ]; then
+	echo -e "Nothing to cull"
 	exit 0
 fi
 
 tmpfile=/tmp/cullfiles.${RANDOM}
 
-pushd ${srcFolder}
-
-case ${interval} in
-"minutes"|"min")
-	find . -mmin ${limit} > ${tmpfile}
+case ${mode} in
+"time")
+	case ${interval} in
+	"minutes"|"min")		GetItemsMin ${tmpfile} ;;
+	"hours"|"hrs")			limit=$(( ${limit} * 60 ))
+					GetItemsMin ${tmpfile} ;;
+	"days"|"d")			GetItemsTime ${tmpfile} ;;
+	"weeks"|"w"|"wks")		limit=$(( ${limit} * 7 ))
+					GetItemsTime ${tmpfile} ;;
+	"months"|"mon")			limit=$(( ${limit} * 30 ))
+					GetItemsTime ${tmpfile} ;;
+	"years"|"yrs")			limit=$(( ${limit} * 365 ))
+					GetItemsTime ${tmpfile} ;;
+	esac ;;
+"number")
+	TrimByNumber ${tmpfile}
 	;;
-"hours"|"hrs")
-	limit=$(( ${limit} * 60 ))
-	find . -mmin ${limit) > ${tmpfile}
-	;;
-"days"|"d")
-	find . -mtime ${limit} > ${tmpfile}
-	;;
-"weeks"|"w"|"wks")
-	limit=$(( ${limit} * 7 ))
-	find . -mtime ${limit} > ${tmpfile}
-	;;
-"months"|"mon")
-	limit=$(( ${limit} * 30 ))
-	find . -mtime ${limit} > ${tmpfile}
-	;;
-"years"|"yrs")
-	limit=$(( ${limit} * 365 ))
-	find . -mtime ${limit} > ${tmpfile}
+"size")
+	TrimBySize ${tmpfile}
 	;;
 esac
 
+[ ! -e ${tmpfile} ] && echo -e "Nothing to cull"
 [ -e ${tmpfile} ] && Cull ${tmpfile} && rm ${tmpfile}
-
-popd
