@@ -252,4 +252,5 @@ case ${mode} in
 esac
 
 [ ! -e ${tmpfile} ] && echo -e "Nothing to cull"
-[ -e ${tmpfile} ] && Cull ${tmpfile} && rm ${tmpfile}
+[ -e ${tmpfile} ] && Cull ${tmpfile}
+[ -e ${tmpfile} ] && rm ${tmpfile}
