@@ -140,7 +140,7 @@ function GetItemsMin()
 		if [ -f ${item} ]; then
 			find ${item} -mmin +${limit} -print >> ${tmpfile}
 		elif [ -d ${item} ]; then
-			find ${item} -mmin +${limit} -print >> ${tmpfile}
+			find ${item} -mmin +${limit} -print | egrep -v "^${item}$" >> ${tmpfile}
 		fi
 	done
 }
@@ -157,7 +157,7 @@ function GetItemsTime()
 		if [ -f ${item} ]; then
 			find ${item} -mtime +${limit} -print >> ${tmpfile}
 		elif [ -d ${item} ]; then
-			find ${item} -mtime +${limit} -print >> ${tmpfile}
+			find ${item} -mtime +${limit} -print | egrep -v "^${item}$" >> ${tmpfile}
 		fi
 	done
 }
